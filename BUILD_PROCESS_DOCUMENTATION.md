@@ -196,6 +196,7 @@ Launched `index.html` in the default browser for the client to review.
 | Reward/earnings tracking per consumer | ✅ |
 | CSV report export | ✅ |
 | **Real SQLite database** — every entry stored in its own file on the server | ✅ |
+| **Cloud PostgreSQL optional** — automatic via `DATABASE_URL` (Neon) | ✅ |
 | Data **persists & shared** across browsers/devices (single server) | ✅ |
 | Fully responsive design | ✅ |
 | Seed/demo data on first load | ✅ |
@@ -229,11 +230,25 @@ Because this is a **single-server demo** (right choice for this stage):
 ### Recommended next steps to go to production
 1. **Deploy to the cloud** (e.g. Render, Railway, or a VPS) so the database is reachable from any device, anywhere, at any time — this is the natural upgrade from running on one machine.
 2. Add **real authentication** (account logins) on top of the server.
-3. Optionally move from SQLite to **PostgreSQL** in the cloud for multi-user scale (SQLite is already perfect for the current stage and can be migrated).
+3. The app now supports **PostgreSQL** via `DATABASE_URL` (Neon) — see the Cloud Deployment section below.
 4. Wire the "AI" to a real LLM (e.g., Claude API) for natural-language insights over thousands of responses.
 5. Add consumer **verification** (mobile number, location) to build the trusted panel.
 6. Integrate **mobile money** (MTN MoMo, Orange Money) for real consumer rewards.
 7. Scale to a full multi-stage **Product Validation System** (concept → prototype → packaging → pricing → product → ad → purchase intent → launch).
+
+---
+
+## 10b. CLOUD DEPLOYMENT (persistent, shareable)
+
+The app can run with **two database modes**, chosen automatically:
+- **No `DATABASE_URL`** → local **SQLite** file (`server/db/ctl.db`).
+- **`DATABASE_URL` set** → **cloud PostgreSQL** (e.g. [Neon](https://neon.tech), free tier) → data persists online, shared across all devices.
+
+**Deploy steps (free):**
+1. Create a free database at **neon.tech** → copy the `postgresql://...` connection string.
+2. On **render.com** → **New → Blueprint** → connect this GitHub repo (uses `render.yaml`).
+3. Paste the Neon connection string as the `DATABASE_URL` env var.
+4. Open your new `https://<app>.onrender.com` link and share it.
 
 ---
 
@@ -245,10 +260,13 @@ Because this is a **single-server demo** (right choice for this stage):
 | `styles.css` | Complete responsive styling & design system |
 | `script.js` | Frontend logic — talks to the server API |
 | `server.js` | Express REST API + AI engine |
-| `server/db/database.js` | SQLite schema, seed data & queries |
-| `server/db/ctl.db` | **The database file** (created on first run) |
+| `server/db/database.js` | Dual-driver DB layer (SQLite local / Postgres cloud) |
+| `server/db/ctl.db` | Local database file (created on first run, SQLite mode) |
 | `package.json` | Node project + dependencies |
 | `START_SERVER.bat` | Double-click launcher to run the server |
+| `render.yaml` | Render Blueprint for one-click cloud deploy |
+| `.env.example` | Environment variable template |
+| `README.md` | Project overview + deploy instructions |
 | `BUILD_PROCESS_DOCUMENTATION.md` | This document |
 
 **To run after setup:** `npm install` (once) → then `npm start` or double-click `START_SERVER.bat`.
