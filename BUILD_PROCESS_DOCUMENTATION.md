@@ -64,8 +64,10 @@ consumers (id, name, email UNIQUE, age_range, location, created)
 tests     (id, company_id → companies, product, type, age_range, location,
            sample_size, brief, reward, active, created_at)
 responses (id, test_id → tests, consumer_id → consumers, name, age_range,
-           location, rating, buy, comment, earned, created_at)
+           location, rating, buy, nps, disappointed, comment, earned, created_at)
 ```
+
+**Modern product-validation fields:** each response now also records `nps` (0–10 "how likely to recommend") and `disappointed` ("very disappointed if it disappeared?") — the two signals behind **NPS** and **Product-Market Fit (PMF)**.
 
 **Note about the session:** Only *who is logged in* is kept in the browser's `localStorage`; every company, consumer, test, and response entry lives in the SQLite database on the server.
 
@@ -74,16 +76,19 @@ responses (id, test_id → tests, consumer_id → consumers, name, age_range,
 - One **test** has many **responses**.
 - One **consumer** has many **responses** (and earns reward per response).
 
-### 3.3 Page / section architecture (single-page app with modals)
-| Section | Role | Purpose |
+### 3.3 Page / section architecture (multi-page site with modals)
+The app was split into separate pages, each linked from a shared navbar:
+
+| Page | File | Purpose |
 |---|---|---|
-| Hero + live dashboard | Public | Live metrics of a running test |
-| Live testing grid | Public | Available tests + apply CTA |
-| Insights | Public | Showcase of the AI decision engine |
-| Pricing | Public | The 3 tiers from the idea doc |
-| Portal modal | Company + Consumer | Auth + dashboards |
-| Create-test modal | Company | Build a new study |
-| Feedback modal | Consumer | Submit ratings for a test |
+| Home | `index.html` | Hero + live dashboard + public test grid |
+| How it works | `how-it-works.html` | The process + product validation journey |
+| Pricing | `pricing.html` | The 3 tiers from the idea doc |
+| Business | `business.html` | Company auth + create-test + dashboard (own page) |
+| Testers | `testers.html` | Consumer auth + take-test + earnings (own page) |
+| Contact | `contact.html` | Contact / CTA form |
+
+Modals retained where needed: create-test (business), feedback (testers).
 
 ### 3.4 User flows
 **Company flow:** Open portal → sign in → create tests → see live stats + AI signal on dashboard.
@@ -123,18 +128,29 @@ getSession() / setSession()  // persisting who is signed in
 
 **Derived metrics:**
 ```js
-testStats(test) -> { n, avg, buyPct }      // compute live stats
-aiInsight(test)  -> { signal, score, quote } // rule-based "AI" recommendation engine
+testStats(test) -> { n, avg, buyPct, nps, pmf }  // compute live stats
+aiInsight(test)  -> { signal, score, verdict, quote } // launch readiness engine
 ```
 
 **AI insight logic (rule-based, deterministic):**
-| Avg rating | Signal |
+The engine combines **four** signals into a single 0–100 **Launch Readiness score**:
+
+| Signal | Weight |
 |---|---|
-| ≥ 8.0 | Strong product-market fit → launch |
-| 6.5–7.9 | Good potential → revisit price/packaging |
-| 5.0–6.4 | Mixed reception → investigate barriers |
-| < 5.0 | Weak fit → revise or halt |
-| Special | If avg ≥ 6 but purchase intent < 50% → "pricing barrier" warning |
+| Satisfaction (avg rating /10) | 45% |
+| Purchase intent (% "yes") | 30% |
+| NPS (promoter − detractor, normalized) | 12% |
+| Product-Market Fit (% "very disappointed") | 13% |
+
+| Readiness | Verdict |
+|---|---|
+| ≥ 75 | Launch with minor refinements |
+| 55–74 (buy intent < 60%) | Pricing barrier → reconsider price |
+| 55–74 (buy intent ≥ 60%) | Refine packaging/positioning |
+| 35–54 | Investigate barriers |
+| < 35 | Revise or halt |
+
+Special case: no responses yet → "no-data" guidance.
 
 **Rendering:** Functions that rebuild the hero, public grid, insights, company dashboard, and consumer dashboard from the live DB each time data changes.
 
@@ -190,15 +206,18 @@ Launched `index.html` in the default browser for the client to review.
 |---|---|
 | Live hero dashboard with real computed metrics | ✅ |
 | Public test grid (auto-updates) | ✅ |
-| Insights / AI decision engine | ✅ |
-| Company: sign in, create test, view stats, view AI signal | ✅ |
-| Consumer: join panel, browse tests, take test, submit feedback | ✅ |
+| **Multi-page site** (home, how-it-works, pricing, business, testers, contact) | ✅ |
+| **NPS (Net Promoter Score) metric** | ✅ |
+| **Product-Market Fit (PMF) / "very disappointed" metric** | ✅ |
+| **Launch Readiness engine** (0–100, with verdict) | ✅ |
+| Company: sign in, create test, view stats + readiness + AI signal | ✅ |
+| Consumer: join panel, browse tests, take test, submit feedback, earn rewards | ✅ |
 | Reward/earnings tracking per consumer | ✅ |
 | CSV report export | ✅ |
 | **Real SQLite database** — every entry stored in its own file on the server | ✅ |
 | **Cloud PostgreSQL optional** — automatic via `DATABASE_URL` (Neon) | ✅ |
 | Data **persists & shared** across browsers/devices (single server) | ✅ |
-| Fully responsive design | ✅ |
+| Fully responsive, premium design | ✅ |
 | Seed/demo data on first load | ✅ |
 
 ---
@@ -256,10 +275,15 @@ The app can run with **two database modes**, chosen automatically:
 
 | File | Description |
 |---|---|
-| `index.html` | Full application structure & modals |
+| `index.html` | Home — hero, live dashboard, public test grid |
+| `how-it-works.html` | The validation process & product journey |
+| `pricing.html` | Tiered pricing plans |
+| `business.html` | Company portal (auth, create test, dashboard) |
+| `testers.html` | Consumer panel (auth, take test, earnings) |
+| `contact.html` | Contact / CTA form |
 | `styles.css` | Complete responsive styling & design system |
-| `script.js` | Frontend logic — talks to the server API |
-| `server.js` | Express REST API + AI engine |
+| `script.js` | Frontend logic — page-aware, talks to the server API |
+| `server.js` | Express REST API + AI Launch Readiness engine |
 | `server/db/database.js` | Dual-driver DB layer (SQLite local / Postgres cloud) |
 | `server/db/ctl.db` | Local database file (created on first run, SQLite mode) |
 | `package.json` | Node project + dependencies |

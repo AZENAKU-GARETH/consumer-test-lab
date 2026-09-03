@@ -1,6 +1,17 @@
 # Consumer Test Lab
 
-A functional product-testing & market-research platform. Companies create product tests; real consumers join the panel, take tests, submit feedback and earn FCFA rewards — with live stats and AI-style decision insights on a dashboard.
+A functional product-testing & market-research platform. Companies create product tests; real consumers join the panel, take tests, submit feedback and earn FCFA rewards — with live stats and modern product-validation insights (NPS, Product-Market Fit, and a combined Launch Readiness score) on a dashboard.
+
+## Pages
+
+| Page | File | Purpose |
+|---|---|---|
+| Home | `index.html` | Hero + live dashboard + available tests grid |
+| How it works | `how-it-works.html` | The validation process & product journey |
+| Pricing | `pricing.html` | Tiered plans in FCFA |
+| Business | `business.html` | Company portal: sign in, create tests, dashboards |
+| Testers | `testers.html` | Consumer panel: join, take tests, earn FCFA |
+| Contact | `contact.html` | Contact / CTA form |
 
 ## Run it locally
 
@@ -19,12 +30,13 @@ Or double-click `START_SERVER.bat` (Windows).
 ## Features
 
 - Live public test grid + hero dashboard (real computed metrics)
+- **Product-validation metrics**: NPS (Net Promoter Score) + Product-Market Fit (Sean Ellis "very disappointed")
+- **Launch Readiness engine** combining satisfaction, purchase intent, NPS and PMF into a 0–100 score with a launch / pricing / refine / revise verdict
 - Business portal: sign in, create tests, view stats + AI decision signal
-- Consumer panel: join, take tests, submit feedback, earn FCFA
-- AI-style insights (rule-based) per study
+- Consumer panel: join, take tests, submit feedback (incl. NPS + PMF questions), earn FCFA
 - CSV report export
 - Seed/demo data on first run
-- Fully responsive
+- Fully responsive, multi-page, premium design
 
 ## Deploy to the cloud (free)
 

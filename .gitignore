@@ -4,4 +4,5 @@ server/db/ctl.db*
 server_out.txt
 server_err.txt
 .opencode/
+.vscode/
 .env
