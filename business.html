@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Business Portal | Consumer Test Lab</title>
+    <meta name="description" content="Manage your product tests, view responses, and see AI-style recommendations." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-page="business">
+    <!-- ============ NAVBAR (shared) ============ -->
+    <nav class="nav wrap">
+      <a class="brand" href="index.html"><span>C</span>CONSUMER TEST LAB</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="how-it-works.html">How it works</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="business.html" aria-current="page">Business</a>
+        <a href="testers.html">Testers</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <div class="nav-actions">
+        <a class="link-btn" href="testers.html">Join panel</a>
+        <button class="button button-lime nav-cta" data-open="create">Start a test <b>↗</b></button>
+      </div>
+    </nav>
+
+    <main id="top" class="portal-page wrap">
+
+      <!-- ============ COMPANY AUTH (shown when signed out) ============ -->
+      <section class="page-hero">
+        <div class="eyebrow"><i></i> BUSINESS PORTAL</div>
+        <h1>Validate your product<br />with <em>real</em> consumers.</h1>
+        <p>Create a study, launch it to the panel, and watch live responses turn into a clear decision signal.</p>
+      </section>
+
+      <div class="portal-auth panel-card" id="company-auth">
+        <h3>Company sign in</h3>
+        <p>Manage your product tests, view responses, and see AI recommendations.</p>
+        <form id="company-signin">
+          <label>Company name<input type="text" id="company-name" placeholder="e.g. Rinda Beverages" required /></label>
+          <label>Work email<input type="email" id="company-email" placeholder="you@company.com" required /></label>
+          <button class="button button-lime" type="submit">Enter Business Portal <b>→</b></button>
+          <p class="form-message" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <!-- ============ COMPANY DASHBOARD (shown when signed in) ============ -->
+      <div class="portal-dash hidden" id="company-dash">
+        <div class="dash-top">
+          <div><h3>Hello, <span id="company-dash-name">Company</span></h3><p>Here are your product validation studies.</p></div>
+          <button class="button button-lime" data-open="create">+ New test</button>
+        </div>
+        <div class="company-stats" id="company-stats"></div>
+        <h4>Your studies</h4>
+        <div class="company-list" id="company-list"></div>
+        <button class="link-btn" id="company-logout">Sign out</button>
+      </div>
+
+    </main>
+
+    <!-- ============ CREATE TEST MODAL ============ -->
+    <div id="create-modal" class="modal-overlay">
+      <div class="modal create-modal">
+        <button class="modal-close" data-close>×</button>
+        <div class="modal-inner">
+          <h3>Start a product test</h3>
+          <p>Tell us what you want to validate. Create a test that real consumers in your target market will respond to.</p>
+          <form id="create-form">
+            <label>Product / concept name<input type="text" id="create-product" placeholder="e.g. Rinda Energy" required /></label>
+            <label>What are you testing?<select id="create-type"> <option value="Product">A new product</option><option value="Concept">Product concept</option><option value="Packaging/Price">Packaging or price</option><option value="Campaign">Advertising campaign</option></select></label>
+            <div class="form-row">
+              <label>Target age<br /><select id="create-age"><option value="18-24">18–24</option><option value="25-34">25–34</option><option value="35-44">35–44</option><option value="45+">45+</option></select></label>
+              <label>Target location<select id="create-location"><option>Yaoundé</option><option>Douala</option><option>All Cameroon</option></select></label>
+            </div>
+            <label>Sample size<select id="create-size"><option value="20">20 testers</option><option value="100" selected>100 testers</option><option value="300">300+ testers</option></select></label>
+            <label>Brief / what to know<textarea id="create-brief" rows="3" placeholder="Describe the product and what you want validated..."></textarea></label>
+            <label>Reward per tester (FCFA)<input type="number" id="create-reward" value="2000" min="500" /></label>
+            <button class="button button-lime" type="submit">Create test <b>→</b></button>
+            <p class="form-message" id="create-message" aria-live="polite"></p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ FOOTER (shared) ============ -->
+    <footer class="footer wrap">
+      <a class="brand" href="index.html"><span>C</span>CONSUMER TEST LAB</a>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="how-it-works.html">How it works</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="testers.html">Testers</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <p>© 2026 Consumer Test Lab · A functional demo platform</p>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>

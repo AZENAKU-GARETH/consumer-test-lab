@@ -1,17 +1,17 @@
 /* =====================================================
-   CONSUMER TEST LAB — Functional Platform
+   CONSUMER TEST LAB — Functional Platform (multi-page)
    Frontend talks to the Server API (server.js),
    which reads/writes a REAL SQLite database (server/db/ctl.db).
    ===================================================== */
 
-/* ---------- API base ---------- */
-const API = '';                       // same origin (served by server.js)
-const SESSION_KEY = 'ctl_session';    // only who is logged in (localStorage)
+/* ---------- API base & session ---------- */
+const API = '';
+const SESSION_KEY = 'ctl_session';
 
-/* ---------- Helpers ---------- */
-const $ = (sel, ctx) => (ctx || document).querySelector(sel);
+const $  = (sel, ctx) => (ctx || document).querySelector(sel);
 const $$ = (sel, ctx) => Array.from((ctx || document).querySelectorAll(sel));
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+const PAGE = document.body.dataset.page || 'home';
 
 async function api(path, opts) {
   const res = await fetch(API + path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts));
@@ -27,15 +27,47 @@ function setSession(s) { if (s) localStorage.setItem(SESSION_KEY, JSON.stringify
 /* ---------- Global cache of tests ---------- */
 let tests = [];
 async function refreshTests() { tests = await api('/api/tests'); return tests; }
-function testStats(n, avg, buyPct) {
-  return { n, avg: n ? Number(avg).toFixed(1) : '0.0', buyPct };
+
+/* ---------- Modal management ---------- */
+function openModal(id) { const m = $(id); if (m) m.classList.add('open'); }
+function closeModals() { $$('.modal-overlay').forEach(m => m.classList.remove('open')); }
+
+/* ---------- Navbar: active link state ---------- */
+function initNav() {
+  $$('.nav-links a').forEach(a => {
+    if (a.getAttribute('href') === PAGE + '.html') a.classList.add('active');
+  });
+  // Nav scrolled shadow
+  const nav = $('.nav');
+  if (nav) {
+    const onScroll = () => nav.classList.toggle('nav-scrolled', window.scrollY > 10);
+    onScroll();
+    window.addEventListener('scroll', onScroll);
+  }
+}
+
+/* ---------- Create-test intent from any page ---------- */
+function handleStartTest() {
+  const sess = getSession();
+  if (sess && sess.role === 'company') {
+    // already a company — go straight to business portal
+    location.href = 'business.html';
+    return;
+  }
+  location.href = 'business.html';
+}
+
+function initStartTestButtons() {
+  $$('[data-open="create"]').forEach(el => el.addEventListener('click', e => {
+    e.preventDefault();
+    if (PAGE === 'business') { openModal('#create-modal'); }
+    else { handleStartTest(); }
+  }));
 }
 
 /* =====================================================
-   RENDERING
+   HOME PAGE
    ===================================================== */
-
-/* --- Public test grid --- */
 function renderPublicTests() {
   const grid = $('#public-test-grid');
   if (!grid) return;
@@ -43,6 +75,11 @@ function renderPublicTests() {
   grid.innerHTML = live.map(t => {
     const s = t.stats;
     const fill = Math.min(100, Math.round((s.n / t.sample_size) * 100));
+    const ai = t.ai || {};
+    const score = typeof ai.score === 'number' ? ai.score : null;
+    const scoreBadge = score !== null
+      ? `<span class="meta-chip ${score >= 55 ? 'chip-good' : score >= 35 ? 'chip-mid' : 'chip-bad'}">Readiness ${score}/100</span>`
+      : '';
     return `
       <div class="test-card">
         <div class="tag">● ${esc(t.type).toUpperCase()}</div>
@@ -52,202 +89,102 @@ function renderPublicTests() {
           <span>Age ${esc(t.age_range)}</span>
           <span>${s.n}/${t.sample_size} responses</span>
         </div>
+        ${scoreBadge}
         <div class="fill"><i style="width:${fill}%"></i></div>
-        <div class="reward">Reward ${Number(t.reward).toLocaleString()} FCFA</div>
-        <button class="button button-lime btn" data-apply="${t.id}">Apply to test →</button>
+        <div class="reward">${Number(t.reward).toLocaleString()} FCFA</div>
+        <a class="button button-lime btn" href="testers.html">Apply to test →</a>
       </div>`;
   }).join('');
   if (!live.length) grid.innerHTML = '<p style="color:#94a29b">No live tests right now. Check back soon!</p>';
 }
 
-/* --- Hero live dashboard --- */
 function renderHero() {
   const t = tests[0];
   if (!t) return;
-  $('#hero-study').innerHTML = `${esc(t.product)} <small>•</small> ${esc(t.type)} test`;
+  const hs = $('#hero-study'); if (hs) hs.innerHTML = `${esc(t.product)} <small>•</small> ${esc(t.type)} test`;
   const s = t.stats;
-  $('#hero-metrics').innerHTML = `
+  const hm = $('#hero-metrics'); if (hm) hm.innerHTML = `
     <article><small>PURCHASE INTENT</small><strong><span class="val">${s.buyPct}</span><em>%</em></strong><p class="up">↑ Based on live responses</p></article>
     <article><small>OVERALL SENTIMENT</small><strong><span class="val">${s.avg}</span><em>/10</em></strong><p class="${ s.avg>=7 ? 'up' : '' }">${ s.avg>=7 ? '↑ Strong acceptance' : 'Review needed' }</p></article>
     <article><small>RESPONSES</small><strong><span class="val">${s.n}</span><em>/${t.sample_size}</em></strong><p>Updated live</p></article>`;
   const ai = t.ai || {};
-  $('#hero-insight-text').textContent = ai.signal ? ai.signal.split(' Collected')[0] : '';
-}
-
-/* --- Dashboard study overview (insights section) --- */
-function renderInsights() {
-  const withResponses = tests.filter(t => t.stats.n > 0);
-  const t = withResponses[0] || tests[0];
-  if (!t) return;
-  const s = t.stats;
-  const ai = t.ai || {};
-  $('#dash-study').innerHTML = `${esc(t.product)}<br /><small>${esc(t.type).toUpperCase()} TEST · 2026</small>`;
-  $('#dash-title-text').textContent = `${t.product} launch test`;
-  $('#dash-responses').textContent = s.n;
-  $('#dash-score').textContent = s.avg;
-  $('#dash-ai').textContent = ai.signal ? ai.signal.split(' Collected')[0] : '';
-  $('#dash-quote').innerHTML = `“${esc(ai.quote)}”<br /><span>${esc(ai.author || '')}</span>`;
-  const tags = ['Taste','Pricing','Packaging','Availability'];
-  $('#dash-tags').innerHTML = tags.map(x => `<b>${x}</b>`).join('');
+  const hit = $('#hero-insight-text'); if (hit) hit.textContent = ai.signal ? ai.signal.split(' Collected')[0] : '';
 }
 
 /* =====================================================
-   COMPANY PORTAL
+   BUSINESS PAGE
    ===================================================== */
 async function showCompanyDash(session) {
-  $('#company-auth').classList.add('hidden');
-  $('#company-dash').classList.remove('hidden');
-  $('#company-dash-name').textContent = session.name;
+  const auth = $('#company-auth'); if (auth) auth.classList.add('hidden');
+  const dash = $('#company-dash'); if (dash) dash.classList.remove('hidden');
+  const nm = $('#company-dash-name'); if (nm) nm.textContent = session.name;
   const insights = await api('/api/company/' + session.companyId + '/insights');
   const mine = insights;
   const total = mine.length;
   const totalResp = mine.reduce((a, t) => a + t.stats.n, 0);
   const withResp = mine.filter(t => t.stats.n > 0);
   const avg = withResp.length ? (withResp.reduce((a, t) => a + Number(t.stats.avg), 0) / withResp.length) : 0;
-  $('#company-stats').innerHTML = `
+  const cs = $('#company-stats'); if (cs) cs.innerHTML = `
     <div class="stat"><small>STUDIES</small><strong>${total}</strong><p>total tests created</p></div>
     <div class="stat"><small>RESPONSES</small><strong>${totalResp}</strong><p>collected across studies</p></div>
     <div class="stat"><small>AVG SCORE</small><strong>${avg ? avg.toFixed(1) : '—'}</strong><p>out of 10</p></div>`;
+  const cl = $('#company-list'); if (!cl) return;
   if (!mine.length) {
-    $('#company-list').innerHTML = '<p style="color:var(--muted)">You haven\'t created any tests yet. Click "+ New test".</p>';
+    cl.innerHTML = '<p style="color:var(--muted)">You haven\'t created any tests yet. Click "+ New test".</p>';
   } else {
-    $('#company-list').innerHTML = mine.map(t => {
+    cl.innerHTML = mine.map(t => {
       const s = t.stats;
       const live = s.n < t.sample_size;
+      const ai = t.ai || {};
+      const score = typeof ai.score === 'number' ? ai.score : null;
       return `
         <div class="study-row">
-          <div><h4>${esc(t.product)}</h4><div class="meta">${esc(t.type)} · ${esc(t.location)} · Age ${esc(t.age_range)} · ${s.n}/${t.sample_size} responses</div></div>
+          <div><h4>${esc(t.product)}</h4><div class="meta">${esc(t.type)} · ${esc(t.location)} · Age ${esc(t.age_range)} · ${s.n}/${t.sample_size} responses</div>
+          ${score !== null ? `<div class="meta stats-line">
+            <span class="mini-stat">Readiness <b>${score}</b>/100</span>
+            <span class="mini-stat">NPS <b>${s.nps ?? '—'}</b></span>
+            <span class="mini-stat">PMF <b>${s.pmf ?? '—'}%</b></span>
+            <span class="mini-stat">Buy <b>${s.buyPct}%</b></span>
+          </div>` : ''}</div>
           <div class="actions">
             <span class="r-score">${s.avg}<small>/10</small></span>
             <span class="status ${live ? 'live' : 'closed'}">${live ? '● LIVE' : 'CLOSED'}</span>
           </div>
         </div>`;
     }).join('');
-    // append AI insights summary per study
-    $('#company-list').innerHTML += '<br><h4 style="margin:.6rem 0 .2rem">AI insight</h4>' + mine.map(t => `
+    cl.innerHTML += '<br><h4 style="margin:.6rem 0 .2rem">AI insight</h4>' + mine.map(t => `
       <div class="study-row">
         <div><h4>${esc(t.product)}</h4><div class="meta">${esc((t.ai.signal||'').split(' Collected')[0])}</div></div>
       </div>`).join('');
   }
 }
 
-/* =====================================================
-   CONSUMER PORTAL
-   ===================================================== */
-function showConsumerDash(session) {
-  $('#consumer-auth').classList.add('hidden');
-  $('#consumer-dash').classList.remove('hidden');
-  $('#consumer-dash-name').textContent = session.name.split(' ')[0];
-  // balance is stored on the session from the server response
-  let balance = session.earned || 0;
-  $('#consumer-balance').textContent = Number(balance).toLocaleString();
-
-  // available tests: have a consumerId, so the server tracked submissions
-  const available = (session.tests || []).filter(t => t.stats.n < t.sample_size);
-  $('#consumer-test-list').innerHTML = available.length ? available.map(t => `
-    <div class="study-row">
-      <div><h4>${esc(t.product)}</h4><div class="meta">${esc(t.type)} · ${esc(t.location)} · ~${t.sample_size} testers · ${t.stats.n}/${t.sample_size} full</div></div>
-      <div class="actions"><span class="r-score">${Number(t.reward).toLocaleString()} FCFA</span>
-      <button class="mini-btn" data-take="${t.id}">Take test</button></div>
-    </div>`).join('') : '<p style="color:var(--muted)">No tests available for you right now. Check back soon!</p>';
-
-  // submissions (earnings history not persisted per-browser — reward total shown above)
-  $('#consumer-submissions').innerHTML = session.submissions && session.submissions.length
-    ? session.submissions.map(s => `
-        <div class="study-row"><div><h4>${esc(s.product)}</h4><div class="meta">Your rating: ${s.rating}/10 · ${s.buy}</div></div>
-        <div class="actions"><span class="r-score">+${Number(s.earned).toLocaleString()} FCFA</span></div></div>`).join('')
-    : '<p style="color:var(--muted)">No submissions yet. Complete a test to earn rewards.</p>';
-}
-
-/* =====================================================
-   MODAL MANAGEMENT
-   ===================================================== */
-function openModal(id) { const m = $(id); if (m) m.classList.add('open'); }
-function closeModals() { $$('.modal-overlay').forEach(m => m.classList.remove('open')); }
-
-/* =====================================================
-   EVENT BINDING
-   ===================================================== */
-document.addEventListener('DOMContentLoaded', () => {
-  const $open = $('#open-nav'); // (optional)
-
-  // Public nav triggers
-  $$('[data-open]').forEach(el => el.addEventListener('click', e => {
-    e.preventDefault();
-    const target = el.dataset.open;
-    const role = el.dataset.role;
-    if (target === 'create') {
-      const s = getSession();
-      if (s && s.role === 'company') { openModal('#create-modal'); }
-      else { openModal('#portal'); activateTab('company'); }
-      return;
-    }
-    if (target === 'panel') { document.querySelector('#panel').scrollIntoView(); return; }
-    if (target === 'portal') {
-      openModal('#portal');
-      const sess = getSession();
-      if (sess && sess.role === 'company') { activateTab('company'); showCompanyDash(sess); }
-      else if (sess && sess.role === 'consumer') { activateTab('consumer'); showConsumerDash(sess); }
-      else if (role === 'company') activateTab('company');
-      else if (role === 'consumer') activateTab('consumer');
-      return;
-    }
-    if (target === 'consumer-signup') { openModal('#portal'); activateTab('consumer'); }
-  }));
-
-  // Portal tabs
-  function activateTab(role) {
-    $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.portalTab === role));
-    $('#portal-company').classList.toggle('hidden', role !== 'company');
-    $('#portal-consumer').classList.toggle('hidden', role !== 'consumer');
-  }
-  $$('[data-portal-tab]').forEach(t => t.addEventListener('click', () => {
-    activateTab(t.dataset.portalTab);
-  }));
-
-  // Close buttons
-  $$('[data-close]').forEach(el => el.addEventListener('click', closeModals));
-  $$('.modal-overlay').forEach(ov => ov.addEventListener('click', e => {
-    if (e.target === ov) closeModals();
-  }));
-
-  // Company sign in (calls API to get-or-create in the database)
-  $('#company-signin').addEventListener('submit', async e => {
+function initBusiness() {
+  const signin = $('#company-signin');
+  if (signin) signin.addEventListener('submit', async e => {
     e.preventDefault();
     const name = $('#company-name').value.trim();
     const email = $('#company-email').value.trim();
     if (!name || !email) return;
-    $('#company-signin .form-message').textContent = 'Signing in…';
+    $('.form-message', signin).textContent = 'Signing in…';
     const c = await api('/api/company', { method: 'POST', body: JSON.stringify({ name, email }) });
-    const sess = { role: 'company', name: c.name, email: c.email, companyId: c.id };
-    setSession(sess);
-    showCompanyDash(sess);
+    setSession({ role: 'company', name: c.name, email: c.email, companyId: c.id });
+    showCompanyDash(getSession());
   });
-  $('#company-logout').addEventListener('click', () => { setSession(null); $('#company-dash').classList.add('hidden'); $('#company-auth').classList.remove('hidden'); });
-
-  // Consumer sign up (calls API to get-or-create in the database)
-  $('#consumer-signup').addEventListener('submit', async e => {
-    e.preventDefault();
-    const name = $('#consumer-name').value.trim();
-    const age = $('#consumer-age').value;
-    const location = $('#consumer-location').value;
-    if (!name) return;
-    const email = 'panel_' + Date.now() + '@ctl.test';
-    $('#consumer-signup .form-message').textContent = 'Joining panel…';
-    const consumer = await api('/api/consumer', { method: 'POST', body: JSON.stringify({ name, email, age_range: age, location }) });
-    const sess = { role: 'consumer', name: consumer.name, email: consumer.email, age, location, consumerId: consumer.id, earned: consumer.earned, submissions: consumer.submissions || [], tests: consumer.tests };
-    setSession(sess);
-    showConsumerDash(sess);
+  const logout = $('#company-logout');
+  if (logout) logout.addEventListener('click', () => {
+    setSession(null);
+    const dash = $('#company-dash'); if (dash) dash.classList.add('hidden');
+    const auth = $('#company-auth'); if (auth) auth.classList.remove('hidden');
   });
-  $('#consumer-logout').addEventListener('click', () => { setSession(null); $('#consumer-dash').classList.add('hidden'); $('#consumer-auth').classList.remove('hidden'); });
 
-  // Create test form (calls API)
-  $('#create-form').addEventListener('submit', async e => {
+  const create = $('#create-form');
+  if (create) create.addEventListener('submit', async e => {
     e.preventDefault();
     const product = $('#create-product').value.trim();
-    if (!product) { $('#create-message').textContent = 'Please enter a product name.'; return; }
+    if (!product) { const m = $('#create-message'); if (m) m.textContent = 'Please enter a product name.'; return; }
     const sess = getSession();
-    if (!sess || sess.role !== 'company') { openModal('#portal'); activateTab('company'); return; }
+    if (!sess || sess.role !== 'company') { location.href = 'business.html'; return; }
     const body = {
       companyId: sess.companyId,
       product,
@@ -258,99 +195,181 @@ document.addEventListener('DOMContentLoaded', () => {
       brief: $('#create-brief').value,
       reward: parseInt($('#create-reward').value) || 0
     };
-    $('#create-message').textContent = 'Creating…';
+    const m = $('#create-message'); if (m) m.textContent = 'Creating…';
     await api('/api/tests', { method: 'POST', body: JSON.stringify(body) });
-    $('#create-message').textContent = `Test "${product}" created! It now appears in the live panel.`;
-    $('#create-form').reset();
+    if (m) m.textContent = `Test "${product}" created! It now appears in the live panel.`;
+    create.reset();
     await refreshTests();
-    renderPublicTests(); renderHero(); renderInsights();
     showCompanyDash(sess);
   });
 
-  // Delegate for apply / take test / export
-  document.addEventListener('click', e => {
-    const applyBtn = e.target.closest('[data-apply]');
-    if (applyBtn) {
-      e.preventDefault();
-      const sess = getSession();
-      if (!sess || sess.role !== 'consumer') { openModal('#portal'); activateTab('consumer'); return; }
-      openFeedback(applyBtn.dataset.apply, sess);
-      return;
-    }
-    const takeBtn = e.target.closest('[data-take]');
-    if (takeBtn) { openFeedback(takeBtn.dataset.take, getSession()); }
-    if (e.target.closest('#dash-export')) { exportReport(); }
+  // Auto-open dashboard if already signed in
+  const sess = getSession();
+  if (sess && sess.role === 'company') showCompanyDash(sess);
+  else closeModals();
+}
+
+/* =====================================================
+   TESTERS PAGE
+   ===================================================== */
+function showConsumerDash(session) {
+  const auth = $('#consumer-auth'); if (auth) auth.classList.add('hidden');
+  const dash = $('#consumer-dash'); if (dash) dash.classList.remove('hidden');
+  const nm = $('#consumer-dash-name'); if (nm) nm.textContent = session.name.split(' ')[0];
+  let balance = session.earned || 0;
+  const cb = $('#consumer-balance'); if (cb) cb.textContent = Number(balance).toLocaleString();
+
+  const available = (session.tests || []).filter(t => t.stats.n < t.sample_size);
+  const tl = $('#consumer-test-list'); if (tl) tl.innerHTML = available.length ? available.map(t => `
+    <div class="study-row">
+      <div><h4>${esc(t.product)}</h4><div class="meta">${esc(t.type)} · ${esc(t.location)} · ~${t.sample_size} testers · ${t.stats.n}/${t.sample_size} full</div></div>
+      <div class="actions"><span class="r-score">${Number(t.reward).toLocaleString()} FCFA</span>
+      <button class="mini-btn primary" data-take="${t.id}">Take test</button></div>
+    </div>`).join('') : '<p style="color:var(--muted)">No tests available for you right now. Check back soon!</p>';
+
+  const sub = $('#consumer-submissions'); if (sub) sub.innerHTML = session.submissions && session.submissions.length
+    ? session.submissions.map(s => `
+        <div class="study-row"><div><h4>${esc(s.product)}</h4><div class="meta">Your rating: ${s.rating}/10 · ${s.buy}</div></div>
+        <div class="actions"><span class="r-score">+${Number(s.earned).toLocaleString()} FCFA</span></div></div>`).join('')
+    : '<p style="color:var(--muted)">No submissions yet. Complete a test to earn rewards.</p>';
+}
+
+function initTesters() {
+  const join = $('#nav-join');
+  if (join) join.addEventListener('click', e => {
+    e.preventDefault();
+    const sess = getSession();
+    if (sess && sess.role === 'consumer') { showConsumerDash(sess); }
+    else { } // already on page; just scroll to form
+    const auth = $('#consumer-auth'); if (auth) auth.scrollIntoView({ behavior: 'smooth' });
   });
 
-  // Feedback modal
+  const signup = $('#consumer-signup');
+  if (signup) signup.addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = $('#consumer-name').value.trim();
+    const age = $('#consumer-age').value;
+    const location = $('#consumer-location').value;
+    if (!name) return;
+    const email = 'panel_' + Date.now() + '@ctl.test';
+    $('.form-message', signup).textContent = 'Joining panel…';
+    const consumer = await api('/api/consumer', { method: 'POST', body: JSON.stringify({ name, email, age_range: age, location }) });
+    const sess = { role: 'consumer', name: consumer.name, email: consumer.email, age, location, consumerId: consumer.id, earned: consumer.earned, submissions: consumer.submissions || [], tests: consumer.tests };
+    setSession(sess);
+    showConsumerDash(sess);
+  });
+  const logout = $('#consumer-logout');
+  if (logout) logout.addEventListener('click', () => {
+    setSession(null);
+    const dash = $('#consumer-dash'); if (dash) dash.classList.add('hidden');
+    const auth = $('#consumer-auth'); if (auth) auth.classList.remove('hidden');
+  });
+
+  // Delegate for take test buttons
+  document.addEventListener('click', e => {
+    const takeBtn = e.target.closest('[data-take]');
+    if (takeBtn) { e.preventDefault(); openFeedback(takeBtn.dataset.take, getSession()); }
+  });
+
   let currentFeedback = null;
+  function buildNpsButtons() {
+    const row = $('#nps-row');
+    if (!row) return;
+    row.innerHTML = '';
+    for (let i = 0; i <= 10; i++) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'nps-btn';
+      b.textContent = i;
+      b.dataset.nps = i;
+      b.addEventListener('click', () => {
+        row.querySelectorAll('.nps-btn').forEach(x => x.classList.remove('sel'));
+        b.classList.add('sel');
+        row.dataset.nps = i;
+      });
+      row.appendChild(b);
+    }
+  }
   function openFeedback(testId, sess) {
-    if (!sess || sess.role !== 'consumer') { openModal('#portal'); activateTab('consumer'); return; }
+    if (!sess || sess.role !== 'consumer') { const auth = $('#consumer-auth'); if (auth) auth.scrollIntoView({ behavior: 'smooth' }); return; }
     const t = tests.find(x => String(x.id) === String(testId));
     if (!t) return;
     currentFeedback = { testId: Number(testId), name: sess.name, consumerId: sess.consumerId };
-    $('#feedback-title').textContent = `${t.product} — feedback`;
-    $('#feedback-sub').textContent = `Complete this test to earn ${Number(t.reward).toLocaleString()} FCFA.`;
-    $('#feedback-form').reset();
-    $('#feedback-message').textContent = '';
+    const ft = $('#feedback-title'); if (ft) ft.textContent = `${t.product} — feedback`;
+    const fs = $('#feedback-sub'); if (fs) fs.textContent = `Complete this test to earn ${Number(t.reward).toLocaleString()} FCFA.`;
+    const ff = $('#feedback-form'); if (ff) ff.reset();
+    const npsRow = $('#nps-row'); if (npsRow) delete npsRow.dataset.nps;
+    const fm = $('#feedback-message'); if (fm) fm.textContent = '';
+    buildNpsButtons();
     openModal('#feedback-modal');
   }
 
-  $('#feedback-form').addEventListener('submit', async e => {
+  const fb = $('#feedback-form');
+  if (fb) fb.addEventListener('submit', async e => {
     e.preventDefault();
     if (!currentFeedback) return;
     const rating = parseInt($('#feedback-rating').value);
     const buy = $('#feedback-buy').value;
+    const npsRow = $('#nps-row');
+    const nps = npsRow && npsRow.dataset.nps !== undefined ? parseInt(npsRow.dataset.nps) : null;
+    const disappointed = $('#feedback-disappointed').value || null;
     const comment = $('#feedback-comment').value.trim();
     const sess = getSession();
-    const body = {
-      consumerId: sess.consumerId,
-      name: sess.name,
-      age_range: sess.age || '',
-      location: sess.location || '',
-      rating, buy, comment
-    };
-    $('#feedback-message').textContent = 'Submitting…';
+    if (nps === null) { const m = $('#feedback-message'); if (m) m.textContent = 'Please select how likely you would be to recommend it (0–10).'; return; }
+    const body = { consumerId: sess.consumerId, name: sess.name, age_range: sess.age || '', location: sess.location || '', rating, buy, nps, disappointed, comment };
+    const m = $('#feedback-message'); if (m) m.textContent = 'Submitting…';
     const result = await api('/api/tests/' + currentFeedback.testId + '/responses', { method: 'POST', body: JSON.stringify(body) });
     closeModals();
-    // refresh session with new earnings
     const consumer = await api('/api/consumer', { method: 'POST', body: JSON.stringify({ name: sess.name, email: sess.email, age_range: sess.age || '', location: sess.location || '' }) });
     setSession({ ...sess, earned: consumer.earned, submissions: consumer.submissions, tests: consumer.tests });
     await refreshTests();
-    renderPublicTests(); renderHero(); renderInsights();
     showConsumerDash(getSession());
     alert(`Thanks ${sess.name}! Your feedback was submitted. +${result.earned.toLocaleString()} FCFA (new balance ${consumer.earned.toLocaleString()} FCFA).`);
   });
 
-  // Contact form
-  $('#contact-form').addEventListener('submit', e => {
+  const sess = getSession();
+  if (sess && sess.role === 'consumer') showConsumerDash(sess);
+  else closeModals();
+}
+
+/* =====================================================
+   CONTACT PAGE
+   ===================================================== */
+function initContact() {
+  const form = $('#contact-form');
+  if (!form) return;
+  form.addEventListener('submit', e => {
     e.preventDefault();
     const type = $('#contact-type').value;
-    $('#contact-form .form-message').textContent = `Thanks — your ${type.toLowerCase()} brief is ready for the Consumer Test Lab team.`;
-    $('#contact-form').reset();
+    $('.form-message', form).textContent = `Thanks — your ${type.toLowerCase()} brief is ready for the Consumer Test Lab team.`;
+    form.reset();
   });
+}
 
-  // Export (CSV) from the server data
-  async function exportReport() {
-    const withResp = tests.filter(t => t.stats.n > 0);
-    const t = withResp[0] || tests[0];
-    if (!t) return;
-    const detail = await api('/api/tests/' + t.id);
-    const rows = [['Name','Age','Location','Rating','Buy','Comment'],
-      ...(detail.responses || []).map(r => [r.name, r.age_range, r.location, r.rating, r.buy, '"' + (r.comment||'').replace(/"/g,'""') + '"'])];
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${t.product.replace(/\s+/g, '_')}_report.csv`;
-    a.click();
+/* =====================================================
+   INIT
+   ===================================================== */
+document.addEventListener('DOMContentLoaded', async () => {
+  initNav();
+  initStartTestButtons();
+
+  // Close buttons & overlay clicks work on any page with modals
+  $$('[data-close]').forEach(el => el.addEventListener('click', closeModals));
+  $$('.modal-overlay').forEach(ov => ov.addEventListener('click', e => { if (e.target === ov) closeModals(); }));
+
+  // Load tests once for pages that need them (home, testers)
+  if (PAGE === 'home' || PAGE === 'testers') {
+    await refreshTests();
   }
 
-  // Initial render (fetch from server DB)
-  (async function init() {
-    await refreshTests();
+  if (PAGE === 'home') {
     renderPublicTests();
     renderHero();
-    renderInsights();
-  })();
+  } else if (PAGE === 'business') {
+    initBusiness();
+  } else if (PAGE === 'testers') {
+    initTesters();
+  } else if (PAGE === 'contact') {
+    initContact();
+  }
 });

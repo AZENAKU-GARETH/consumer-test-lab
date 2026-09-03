@@ -18,7 +18,26 @@ function computeStats(responses) {
   const n = responses.length;
   const avg = n ? (responses.reduce((a, b) => a + b.rating, 0) / n) : 0;
   const buyYes = n ? Math.round((responses.filter(x => x.buy === 'yes').length / n) * 100) : 0;
-  return { n, avg: n ? Number(avg.toFixed(1)) : 0, buyPct: buyYes };
+
+  // NPS (Net Promoter Score): promoters (9-10) minus detractors (0-6), range -100..100
+  const withNps = responses.filter(r => typeof r.nps === 'number');
+  const npsValid = withNps.length;
+  let nps = null;
+  if (npsValid) {
+    const promoters = withNps.filter(r => r.nps >= 9).length;
+    const detractors = withNps.filter(r => r.nps <= 6).length;
+    nps = Math.round(((promoters - detractors) / npsValid) * 100);
+  }
+
+  // Product-Market Fit (Sean Ellis): % who would be "very disappointed" without it
+  const withD = responses.filter(r => r.disappointed !== null && r.disappointed !== undefined);
+  const pmfValid = withD.length;
+  let pmf = null;
+  if (pmfValid) {
+    pmf = Math.round((withD.filter(r => r.disappointed === 'yes').length / pmfValid) * 100);
+  }
+
+  return { n, avg: n ? Number(avg.toFixed(1)) : 0, buyPct: buyYes, nps, pmf };
 }
 
 const SEED_TESTS = [
@@ -41,19 +60,19 @@ async function seedTestData(insertCompany, insertTest, insertResponse, lastId) {
   insertTest(ids.novus, 'Flexi Data Plan', 'Concept', '18-34', 'Yaoundé', 150,
     'New flexible data plan for young professionals. Test willingness to switch.', 3000);
 
-  insertResponse(ids.t1, 'Amina N.', '25-34', 'Yaoundé', 9, 'yes',
+  insertResponse(ids.t1, 'Amina N.', '25-34', 'Yaoundé', 9, 'yes', 10, 'yes',
     'The taste is really good. I would buy it every week if it was a little more affordable.', 2000);
-  insertResponse(ids.t1, 'Jean-Paul K.', '25-34', 'Douala', 8, 'yes',
+  insertResponse(ids.t1, 'Jean-Paul K.', '25-34', 'Douala', 8, 'yes', 9, 'yes',
     'Love the energy boost. Packaging feels premium but price is a concern.', 2000);
-  insertResponse(ids.t1, 'Sandra M.', '35-44', 'Yaoundé', 7, 'maybe',
+  insertResponse(ids.t1, 'Sandra M.', '35-44', 'Yaoundé', 7, 'maybe', 7, 'no',
     'Taste is decent. Hard to justify at this price point.', 2000);
-  insertResponse(ids.t1, 'David T.', '18-24', 'Douala', 10, 'yes',
+  insertResponse(ids.t1, 'David T.', '18-24', 'Douala', 10, 'yes', 10, 'yes',
     'Best energy drink I have tried from a local brand!', 2000);
-  insertResponse(ids.t2, 'Fatima B.', '25-34', 'Yaoundé', 8, 'yes',
+  insertResponse(ids.t2, 'Fatima B.', '25-34', 'Yaoundé', 8, 'yes', 9, 'yes',
     'Absorbs quickly and no residue. Would love a bigger size.', 2500);
-  insertResponse(ids.t2, 'Marie-Laure D.', '35-44', 'Yaoundé', 7, 'maybe',
+  insertResponse(ids.t2, 'Marie-Laure D.', '35-44', 'Yaoundé', 7, 'maybe', 6, 'no',
     'Nice scent but I want to see results before repurchasing.', 2500);
-  insertResponse(ids.t3, 'Emmanuel O.', '18-24', 'Bafoussam', 6, 'maybe',
+  insertResponse(ids.t3, 'Emmanuel O.', '18-24', 'Bafoussam', 6, 'maybe', 5, 'no',
     'Interesting idea but I prefer something savoury over sweet.', 2000);
 }
 
@@ -99,21 +118,26 @@ if (usePg) {
           created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         CREATE TABLE IF NOT EXISTS responses (
-          id          SERIAL PRIMARY KEY,
-          test_id     INTEGER NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
-          consumer_id INTEGER REFERENCES consumers(id) ON DELETE SET NULL,
-          name        TEXT,
-          age_range   TEXT,
-          location    TEXT,
-          rating      INTEGER NOT NULL,
-          buy         TEXT,
-          comment     TEXT,
-          earned      INTEGER NOT NULL DEFAULT 0,
-          created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+          id            SERIAL PRIMARY KEY,
+          test_id       INTEGER NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+          consumer_id   INTEGER REFERENCES consumers(id) ON DELETE SET NULL,
+          name          TEXT,
+          age_range     TEXT,
+          location      TEXT,
+          rating        INTEGER NOT NULL,
+          buy           TEXT,
+          nps           INTEGER,
+          disappointed  TEXT,
+          comment       TEXT,
+          earned        INTEGER NOT NULL DEFAULT 0,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         CREATE INDEX IF NOT EXISTS idx_responses_test ON responses(test_id);
         CREATE INDEX IF NOT EXISTS idx_tests_company ON tests(company_id);
       `);
+      // Migration: add columns to existing responses tables (safe no-op if already present)
+      try { await pool.query('ALTER TABLE responses ADD COLUMN IF NOT EXISTS nps INTEGER'); } catch (e) {}
+      try { await pool.query('ALTER TABLE responses ADD COLUMN IF NOT EXISTS disappointed TEXT'); } catch (e) {}
       // Seed if empty
       const { rows } = await pool.query('SELECT COUNT(*)::int AS c FROM tests');
       if (rows[0].c > 0) return;
@@ -123,11 +147,11 @@ if (usePg) {
         `INSERT INTO tests (company_id, product, type, age_range, location, sample_size, brief, reward)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
         [cid, p, ty, ag, lo, ss, br, rw])).rows[0].id;
-      const insertResponse = async (tid, n, ag, lo, rt, by, co, ea) => {
+      const insertResponse = async (tid, n, ag, lo, rt, by, np, di, co, ea) => {
         await pool.query(
-          `INSERT INTO responses (test_id, consumer_id, name, age_range, location, rating, buy, comment, earned)
-           VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8)`,
-          [tid, n, ag, lo, rt, by, co, ea]);
+          `INSERT INTO responses (test_id, consumer_id, name, age_range, location, rating, buy, nps, disappointed, comment, earned)
+           VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [tid, n, ag, lo, rt, by, np, di, co, ea]);
       };
       await seedTestData(insertCompany, insertTest, insertResponse, id => id);
     },
@@ -152,7 +176,7 @@ if (usePg) {
 
     async getResponses(testId) {
       const { rows } = await pool.query(`
-        SELECT id, name, age_range, location, rating, buy, comment, earned, created_at
+        SELECT id, name, age_range, location, rating, buy, nps, disappointed, comment, earned, created_at
         FROM responses WHERE test_id = $1 ORDER BY created_at DESC`, [Number(testId)]);
       return rows;
     },
@@ -194,12 +218,15 @@ if (usePg) {
       return this.getTest(rows[0].id);
     },
 
-    async addResponse({ testId, consumerId, name, age_range, location, rating, buy, comment, earned }) {
+    async addResponse({ testId, consumerId, name, age_range, location, rating, buy, nps, disappointed, comment, earned }) {
       const { rows } = await pool.query(
-        `INSERT INTO responses (test_id, consumer_id, name, age_range, location, rating, buy, comment, earned)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+        `INSERT INTO responses (test_id, consumer_id, name, age_range, location, rating, buy, nps, disappointed, comment, earned)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
         [Number(testId), consumerId || null, name || '', age_range || '', location || '',
-         Number(rating) || 0, buy || 'maybe', comment || '', earned]);
+         Number(rating) || 0, buy || 'maybe',
+         nps === null || nps === undefined ? null : Number(nps),
+         disappointed === null || disappointed === undefined ? null : (disappointed === 'yes' ? 'yes' : 'no'),
+         comment || '', earned]);
       return { id: rows[0].id, earned };
     },
 
@@ -268,21 +295,28 @@ function createSqliteDriver() {
       created_at   TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS responses (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      test_id     INTEGER NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
-      consumer_id INTEGER REFERENCES consumers(id) ON DELETE SET NULL,
-      name        TEXT,
-      age_range   TEXT,
-      location    TEXT,
-      rating      INTEGER NOT NULL,
-      buy         TEXT,
-      comment     TEXT,
-      earned      INTEGER NOT NULL DEFAULT 0,
-      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      test_id       INTEGER NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+      consumer_id   INTEGER REFERENCES consumers(id) ON DELETE SET NULL,
+      name          TEXT,
+      age_range     TEXT,
+      location      TEXT,
+      rating        INTEGER NOT NULL,
+      buy           TEXT,
+      nps           INTEGER,
+      disappointed  TEXT,
+      comment       TEXT,
+      earned        INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_responses_test ON responses(test_id);
     CREATE INDEX IF NOT EXISTS idx_tests_company ON tests(company_id);
   `);
+
+  // Migration: add columns to existing responses tables (safe no-op if already present)
+  const respCols = raw.prepare("PRAGMA table_info(responses)").all().map(c => c.name);
+  if (!respCols.includes('nps')) { try { raw.exec('ALTER TABLE responses ADD COLUMN nps INTEGER'); } catch (e) {} }
+  if (!respCols.includes('disappointed')) { try { raw.exec('ALTER TABLE responses ADD COLUMN disappointed TEXT'); } catch (e) {} }
 
   const driver = {
     async init() {
@@ -292,9 +326,9 @@ function createSqliteDriver() {
       const insertTest = (cid, p, ty, ag, lo, ss, br, rw) => raw.prepare(
         `INSERT INTO tests (company_id, product, type, age_range, location, sample_size, brief, reward)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(cid, p, ty, ag, lo, ss, br, rw).lastInsertRowid;
-      const insertResponse = (tid, nm, ag, lo, rt, by, co, ea) => raw.prepare(
-        `INSERT INTO responses (test_id, consumer_id, name, age_range, location, rating, buy, comment, earned)
-         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)`).run(tid, nm, ag, lo, rt, by, co, ea);
+      const insertResponse = (tid, nm, ag, lo, rt, by, np, di, co, ea) => raw.prepare(
+        `INSERT INTO responses (test_id, consumer_id, name, age_range, location, rating, buy, nps, disappointed, comment, earned)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(tid, nm, ag, lo, rt, by, np, di, co, ea);
       seedTestData(insertCompany, insertTest, insertResponse, id => id);
     },
 
@@ -316,7 +350,7 @@ function createSqliteDriver() {
 
     async getResponses(testId) {
       return raw.prepare(`
-        SELECT id, name, age_range, location, rating, buy, comment, earned, created_at
+        SELECT id, name, age_range, location, rating, buy, nps, disappointed, comment, earned, created_at
         FROM responses WHERE test_id = ? ORDER BY created_at DESC`).all(Number(testId));
     },
 
@@ -357,12 +391,15 @@ function createSqliteDriver() {
       return this.getTest(info.lastInsertRowid);
     },
 
-    async addResponse({ testId, consumerId, name, age_range, location, rating, buy, comment, earned }) {
+    async addResponse({ testId, consumerId, name, age_range, location, rating, buy, nps, disappointed, comment, earned }) {
       const info = raw.prepare(
-        `INSERT INTO responses (test_id, consumer_id, name, age_range, location, rating, buy, comment, earned)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        `INSERT INTO responses (test_id, consumer_id, name, age_range, location, rating, buy, nps, disappointed, comment, earned)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         Number(testId), consumerId || null, name || '', age_range || '', location || '',
-        Number(rating) || 0, buy || 'maybe', comment || '', earned);
+        Number(rating) || 0, buy || 'maybe',
+        nps === null || nps === undefined ? null : Number(nps),
+        disappointed === null || disappointed === undefined ? null : (disappointed === 'yes' ? 'yes' : 'no'),
+        comment || '', earned);
       return { id: info.lastInsertRowid, earned };
     },
 

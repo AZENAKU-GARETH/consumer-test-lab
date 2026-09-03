@@ -19,34 +19,55 @@ app.use(express.static(__dirname)); // serve index.html / styles.css / script.js
 
 /* -----------------------------------------------------
    AI insight engine (rule-based, computed on the server)
+   Combines: satisfaction score, purchase intent,
+   NPS (promoter/detractor balance) and Product-Market
+   Fit (Sean Ellis: % "very disappointed") into a single
+   launch recommendation.
    ----------------------------------------------------- */
 function aiInsight(test, stats) {
-  const { n, avg, buyPct } = stats;
-  let signal, quote;
-  let pending;
+  const { n, avg, buyPct, nps, pmf } = stats;
+  let signal, quote, verdict, score = null;
   if (n === 0) {
     signal = 'No responses yet. Share this study with your testers to start collecting feedback.';
     quote = '"The lack of data is your real risk — validate before you launch."';
-  } else if (avg >= 8) {
-    signal = 'Strong product-market fit. Recommend launch with minor refinements.';
-    quote = '"Strong and repeatable validation. Move to launch."';
-  } else if (avg >= 6.5 && buyPct < 60) {
-    signal = 'Consumers like the product, but purchase intent is low — pricing is the likely barrier. Reconsider price before launch.';
-    quote = '"Liked, but will they pay? Test the price point."';
-  } else if (avg >= 6.5) {
-    signal = 'Good potential. Refine the offer and positioning, then run a packaging test.';
-    quote = '"Good foundation. Polish the packaging and story."';
-  } else if (avg >= 5) {
-    signal = 'Mixed reception. Investigate the barriers before investing in production.';
-    quote = '"You have their attention, but not their conviction."';
+    verdict = 'no-data';
   } else {
-    signal = 'Weak fit. Revise the concept significantly or consider halting.';
-    quote = '"Low scores early save you from a costly launch."';
+    // Compose a 0-100 launch readiness score from multiple signals
+    const score = Math.round(
+      (avg / 10) * 45 +          // satisfaction (45%)
+      (buyPct / 100) * 30 +      // purchase intent (30%)
+      ((nps !== null ? (nps + 100) / 200 : 0.5)) * 12 +   // NPS (12%)
+      (pmf !== null ? pmf / 100 : 0.4) * 13               // product-market fit (13%)
+    );
+
+    if (score >= 75) {
+      signal = `Strong product-market fit (readiness ${score}/100). Recommend launch with minor refinements. NPS ${nps ?? '—'} and ${pmf ?? '—'}% very-disappointed suggest real demand.`;
+      quote = '"Strong and repeatable validation. Move to launch."';
+      verdict = 'launch';
+    } else if (score >= 55) {
+      if (buyPct < 60) {
+        signal = `Consumers like the product (readiness ${score}/100) but purchase intent is low (${buyPct}%) — pricing is the likely barrier. Reconsider price before launch.`;
+        quote = '"Liked, but will they pay? Test the price point."';
+        verdict = 'pricing';
+      } else {
+        signal = `Good potential (readiness ${score}/100). Refine position and packaging, then run a packaging or pricing test. NPS ${nps ?? '—'}.`;
+        quote = '"Good foundation. Polish the packaging and story."';
+        verdict = 'refine';
+      }
+    } else if (score >= 35) {
+      signal = `Mixed reception (readiness ${score}/100). Investigate the barriers before investing in production. NPS ${nps ?? '—'} and purchase intent ${buyPct}% need attention.`;
+      quote = '"You have their attention, but not their conviction."';
+      verdict = 'investigate';
+    } else {
+      signal = `Weak fit (readiness ${score}/100). Revise the concept significantly or consider halting. PMF ${pmf ?? '—'}% very-disappointed shows limited pull.`;
+      quote = '"Low scores early save you from a costly launch."';
+      verdict = 'revise';
+    }
   }
-  pending = test.sample_size - n;
+  const pending = test.sample_size - n;
   signal += ` Collected ${n}/${test.sample_size} responses.`;
   return {
-    n, avg, buyPct, signal, quote,
+    n, avg, buyPct, nps, pmf, score, signal, quote, verdict,
     author: pending > 0 ? `Based on ${n} responses so far` : 'Based on all responses',
   };
 }
@@ -117,10 +138,10 @@ app.post('/api/tests/:id/responses', async (req, res) => {
   try {
     const t = await db.getTest(req.params.id);
     if (!t) return res.status(404).json({ error: 'Test not found' });
-    const { consumerId, name, age_range, location, rating, buy, comment } = req.body || {};
+    const { consumerId, name, age_range, location, rating, buy, nps, disappointed, comment } = req.body || {};
     const earned = t.reward || 0;
     const saved = await db.addResponse({
-      testId: t.id, consumerId, name, age_range, location, rating, buy, comment, earned,
+      testId: t.id, consumerId, name, age_range, location, rating, buy, nps, disappointed, comment, earned,
     });
     const stats = await db.getTestStats(t.id);
     res.json({ ...saved, stats, ai: aiInsight(t, stats) });

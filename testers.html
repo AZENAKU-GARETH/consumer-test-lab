@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tester Portal | Consumer Test Lab</title>
+    <meta name="description" content="Join the panel. Get paid to test new products and share your honest opinion." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-page="testers">
+    <!-- ============ NAVBAR (shared) ============ -->
+    <nav class="nav wrap">
+      <a class="brand" href="index.html"><span>C</span>CONSUMER TEST LAB</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="how-it-works.html">How it works</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="business.html">Business</a>
+        <a href="testers.html" aria-current="page">Testers</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <div class="nav-actions">
+        <button class="link-btn" id="nav-join">Join panel</button>
+        <a class="button button-lime nav-cta" href="business.html">Start a test <b>↗</b></a>
+      </div>
+    </nav>
+
+    <main id="top" class="portal-page wrap">
+
+      <!-- ============ CONSUMER AUTH (shown when signed out) ============ -->
+      <section class="page-hero">
+        <div class="eyebrow"><i></i> TESTER PORTAL</div>
+        <h1>Get paid to share<br />your <em>honest</em> opinion.</h1>
+        <p>Join the panel, take product tests from real Cameroon brands, and earn FCFA for every response.</p>
+      </section>
+
+      <div class="portal-auth panel-card" id="consumer-auth">
+        <h3>Become a tester</h3>
+        <p>Join the panel. Get paid to test new products and share your honest opinion.</p>
+        <form id="consumer-signup">
+          <label>Full name<input type="text" id="consumer-name" placeholder="e.g. Amina N." required /></label>
+          <label>Age range<select id="consumer-age"><option value="18-24">18–24</option><option value="25-34">25–34</option><option value="35-44">35–44</option><option value="45+">45+</option></select></label>
+          <label>Location<select id="consumer-location"><option>Yaoundé</option><option>Douala</option><option>Bafoussam</option><option>Other</option></select></label>
+          <button class="button button-lime" type="submit">Join the panel <b>→</b></button>
+          <p class="form-message" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <!-- ============ CONSUMER DASHBOARD (shown when signed in) ============ -->
+      <div class="portal-dash hidden" id="consumer-dash">
+        <div class="dash-top">
+          <div><h3>Welcome, <span id="consumer-dash-name">Tester</span></h3><p>Available tests and your earnings.</p></div>
+          <div class="earnings">Balance: <strong id="consumer-balance">0</strong> FCFA</div>
+        </div>
+        <h4>Available tests</h4>
+        <div class="test-list" id="consumer-test-list"></div>
+        <h4>Your submissions</h4>
+        <div class="consumer-submissions" id="consumer-submissions"></div>
+        <button class="link-btn" id="consumer-logout">Sign out</button>
+      </div>
+
+    </main>
+
+    <!-- ============ FEEDBACK MODAL (tester answers a test) ============ -->
+    <div id="feedback-modal" class="modal-overlay">
+      <div class="modal create-modal">
+        <button class="modal-close" data-close>×</button>
+        <div class="modal-inner">
+          <h3 id="feedback-title">Test feedback</h3>
+          <p id="feedback-sub">Share your honest opinion to earn your reward.</p>
+          <form id="feedback-form">
+            <label>Overall rating (1–10)<input type="number" id="feedback-rating" min="1" max="10" required /></label>
+            <label>How likely would you be to buy this?<select id="feedback-buy"><option value="yes">Yes, definitely</option><option value="maybe">Maybe</option><option value="no">No</option></select></label>
+            <label>How likely are you to recommend it to a friend? (0 = not at all, 10 = absolutely)</label>
+            <div class="nps-row" id="nps-row"></div>
+            <label>How disappointed would you be if this product disappeared?<select id="feedback-disappointed"><option value="">Select…</option><option value="yes">Very disappointed — I really want it</option><option value="no">Not disappointed — I could live without it</option></select></label>
+            <label>What did you like / dislike?<textarea id="feedback-comment" rows="3" placeholder="Share your honest thoughts..."></textarea></label>
+            <button class="button button-lime" type="submit">Submit feedback <b>→</b></button>
+            <p class="form-message" id="feedback-message" aria-live="polite"></p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ FOOTER (shared) ============ -->
+    <footer class="footer wrap">
+      <a class="brand" href="index.html"><span>C</span>CONSUMER TEST LAB</a>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="how-it-works.html">How it works</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="business.html">Business</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <p>© 2026 Consumer Test Lab · A functional demo platform</p>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
